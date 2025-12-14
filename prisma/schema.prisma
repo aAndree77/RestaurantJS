@@ -1,0 +1,236 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String?
+  email         String    @unique
+  password      String?
+  image         String?
+  emailVerified DateTime?
+  phone         String?
+  address       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  cart          Cart?
+  orders        Order[]
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Category {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  name      String     @unique
+  icon      String?    @default("🍽️")
+  image     String?
+  color     String     @default("bg-gray-500")
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  menuItems MenuItem[]
+}
+
+model MenuItem {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String
+  price       Float
+  image       String
+  available   Boolean     @default(true)
+  categoryId  String?     @db.ObjectId
+  category    Category?   @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+}
+
+model Cart {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String     @unique @db.ObjectId
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  cartId     String   @db.ObjectId
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItemId String   @db.ObjectId
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([cartId, menuItemId])
+}
+
+model Order {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber     String      @unique
+  userId          String      @db.ObjectId
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  status          OrderStatus @default(PENDING)
+  paymentMethod   String      @default("card")
+  paymentStatus   String      @default("pending")
+  subtotal        Float
+  deliveryFee     Float       @default(0)
+  total           Float
+  deliveryAddress String
+  phone           String
+  notes           String?
+  estimatedTime   String?
+  queuePosition   Int?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId    String   @db.ObjectId
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String   @db.ObjectId
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  name       String
+  price      Float
+  quantity   Int
+  createdAt  DateTime @default(now())
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+model Admin {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  name      String?
+  image     String?  // Poza de profil de la Google
+  password  String?  // Null pentru Google auth, hash pentru email/password
+  authType  String   @default("google") // google, credentials
+  role      String   @default("admin") // super_admin, admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relații pentru chat
+  sentMessages     ChatMessage[] @relation("SentMessages")
+  chatMemberships  ChatMember[]
+}
+
+// Model pentru grupuri/conversații de chat
+model ChatGroup {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  name        String?       // Null pentru conversații individuale
+  type        String        @default("individual") // individual, group, general
+  image       String?       // Iconița grupului (URL)
+  createdBy   String?       @db.ObjectId // Super admin care a creat grupul
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  members     ChatMember[]
+  messages    ChatMessage[]
+}
+
+// Model pentru membrii unui chat
+model ChatMember {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  groupId   String    @db.ObjectId
+  adminId   String    @db.ObjectId
+  joinedAt  DateTime  @default(now())
+  lastRead  DateTime  @default(now())
+  
+  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  @@unique([groupId, adminId])
+}
+
+// Model pentru mesaje
+model ChatMessage {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  groupId   String    @db.ObjectId
+  senderId  String    @db.ObjectId
+  content   String?   // Text mesaj
+  image     String?   // URL imagine atașată
+  isEdited  Boolean   @default(false)
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender    Admin     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Testimonial {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  role      String
+  content   String
+  image     String?
+  rating    Int      @default(5)
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CategoryImage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  url       String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+}

@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import prisma from "@/lib/prisma"
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // GET - Obține o comandă specifică
 export async function GET(request, { params }) {
   try {

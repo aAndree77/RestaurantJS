@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // GET - Obține toate produsele din meniu grupate pe categorii
 export async function GET() {
   try {

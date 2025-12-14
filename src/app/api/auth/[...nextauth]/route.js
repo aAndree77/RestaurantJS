@@ -5,6 +5,9 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [

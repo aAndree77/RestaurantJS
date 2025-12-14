@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import prisma from "@/lib/prisma"
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Generează un număr de comandă unic
 function generateOrderNumber() {
   const date = new Date()

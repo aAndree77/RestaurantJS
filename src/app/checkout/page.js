@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCart } from "@/context/CartContext"
@@ -9,7 +9,7 @@ import Link from "next/link"
 import Navbar from "../components/Navbar"
 import Script from "next/script"
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -488,5 +488,24 @@ export default function CheckoutPage() {
         </div>
       </main>
     </>
+  )
+}
+
+function CheckoutLoading() {
+  return (
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+      <div className="relative">
+        <div className="w-16 h-16 border-4 border-amber-200 rounded-full"></div>
+        <div className="absolute top-0 left-0 w-16 h-16 border-4 border-amber-500 rounded-full border-t-transparent animate-spin"></div>
+      </div>
+    </div>
+  )
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<CheckoutLoading />}>
+      <CheckoutContent />
+    </Suspense>
   )
 }

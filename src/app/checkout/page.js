@@ -1,28 +1,33 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useCart } from "@/context/CartContext"
 import Image from "next/image"
 import Link from "next/link"
 import Navbar from "../components/Navbar"
+import Script from "next/script"
 
 export default function CheckoutPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const { cart, loading: cartLoading, clearCart, refetch } = useCart()
+  const searchParams = useSearchParams()
+  const { cart, loading: cartLoading, refetch } = useCart()
+  const paypalButtonRef = useRef(null)
+  const paypalRendered = useRef(false)
   
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     address: "",
-    notes: "",
-    paymentMethod: "card"
+    notes: ""
   })
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [step, setStep] = useState(1) // 1: detalii, 2: plată, 3: procesare
+  const [step, setStep] = useState(1)
+  const [paypalReady, setPaypalReady] = useState(false)
+  const [orderData, setOrderData] = useState(null)
 
   useEffect(() => {
     if (session?.user) {
@@ -44,6 +49,14 @@ export default function CheckoutPage() {
       router.push("/#menu")
     }
   }, [cart, cartLoading, router, step])
+
+  // Verifică dacă utilizatorul revine de la PayPal
+  useEffect(() => {
+    if (searchParams.get("canceled") === "true") {
+      setErrors({ submit: "Plata a fost anulată. Încearcă din nou." })
+      setStep(2)
+    }
+  }, [searchParams])
 
   const freeDeliveryThreshold = 100
   const deliveryFee = cart?.total >= freeDeliveryThreshold ? 0 : 15
@@ -77,49 +90,94 @@ export default function CheckoutPage() {
     
     if (!validateForm()) return
 
+    setOrderData({
+      deliveryAddress: formData.address,
+      phone: formData.phone,
+      notes: formData.notes
+    })
     setStep(2)
   }
 
-  const handlePayment = async () => {
-    setStep(3)
-    setIsSubmitting(true)
-
-    // Simulăm procesarea plății
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    try {
-      const response = await fetch("/api/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
+  // Render PayPal buttons când sunt gata
+  useEffect(() => {
+    if (step === 2 && paypalReady && !paypalRendered.current && paypalButtonRef.current && orderData) {
+      paypalRendered.current = true
+      
+      window.paypal.Buttons({
+        style: {
+          layout: 'vertical',
+          color: 'gold',
+          shape: 'rect',
+          label: 'pay',
+          height: 50
         },
-        body: JSON.stringify({
-          deliveryAddress: formData.address,
-          phone: formData.phone,
-          notes: formData.notes,
-          paymentMethod: formData.paymentMethod
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        // Golește coșul local
-        await refetch()
-        // Redirect la pagina de confirmare
-        router.push(`/order/${data.id}`)
-      } else {
-        setErrors({ submit: data.error })
-        setStep(2)
-      }
-    } catch (error) {
-      console.error("Error placing order:", error)
-      setErrors({ submit: "Eroare la plasarea comenzii. Încearcă din nou." })
-      setStep(2)
-    } finally {
-      setIsSubmitting(false)
+        createOrder: async () => {
+          try {
+            const response = await fetch("/api/paypal/create-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(orderData)
+            })
+            
+            const data = await response.json()
+            
+            if (!response.ok) {
+              throw new Error(data.error)
+            }
+            
+            return data.orderId
+          } catch (error) {
+            setErrors({ submit: error.message || "Eroare la crearea plății" })
+            throw error
+          }
+        },
+        onApprove: async (data) => {
+          setStep(3)
+          setIsSubmitting(true)
+          
+          try {
+            const response = await fetch("/api/paypal/capture-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                paypalOrderId: data.orderID,
+                ...orderData
+              })
+            })
+            
+            const result = await response.json()
+            
+            if (response.ok) {
+              await refetch()
+              router.push(`/order/${result.id}`)
+            } else {
+              setErrors({ submit: result.error })
+              setStep(2)
+            }
+          } catch (error) {
+            setErrors({ submit: "Eroare la procesarea plății" })
+            setStep(2)
+          } finally {
+            setIsSubmitting(false)
+          }
+        },
+        onCancel: () => {
+          setErrors({ submit: "Plata a fost anulată" })
+        },
+        onError: (err) => {
+          console.error("PayPal error:", err)
+          setErrors({ submit: "Eroare la procesarea plății PayPal" })
+        }
+      }).render(paypalButtonRef.current)
     }
-  }
+  }, [step, paypalReady, orderData, router, refetch])
+
+  // Reset rendered flag when going back
+  useEffect(() => {
+    if (step === 1) {
+      paypalRendered.current = false
+    }
+  }, [step])
 
   if (status === "loading" || cartLoading) {
     return (
@@ -134,6 +192,10 @@ export default function CheckoutPage() {
 
   return (
     <>
+      <Script
+        src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&currency=EUR`}
+        onLoad={() => setPaypalReady(true)}
+      />
       <Navbar solid />
       <main className="min-h-screen bg-gradient-to-b from-stone-100 to-stone-50 pt-24 pb-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -153,7 +215,7 @@ export default function CheckoutPage() {
             <div className="flex items-center justify-center gap-4">
               {[
                 { num: 1, label: "Detalii livrare" },
-                { num: 2, label: "Plată" },
+                { num: 2, label: "Plată PayPal" },
                 { num: 3, label: "Confirmare" }
               ].map((s, i) => (
                 <div key={s.num} className="flex items-center">
@@ -266,118 +328,64 @@ export default function CheckoutPage() {
               {step === 2 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
                   <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <svg className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
                       </svg>
                     </div>
-                    Metodă de Plată
+                    Plată cu PayPal
                   </h2>
 
                   {errors.submit && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-3">
+                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                       {errors.submit}
                     </div>
                   )}
 
-                  <div className="space-y-4 mb-8">
-                    {[
-                      { id: "card", label: "Card bancar", icon: (
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                        </svg>
-                      ), desc: "Plătește securizat cu cardul" },
-                      { id: "cash", label: "Numerar la livrare", icon: (
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                      ), desc: "Plătește când primești comanda" }
-                    ].map((method) => (
-                      <label
-                        key={method.id}
-                        className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          formData.paymentMethod === method.id 
-                            ? 'border-amber-500 bg-amber-50' 
-                            : 'border-gray-200 hover:border-amber-300'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value={method.id}
-                          checked={formData.paymentMethod === method.id}
-                          onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                          className="sr-only"
-                        />
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                          formData.paymentMethod === method.id ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {method.icon}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-900">{method.label}</p>
-                          <p className="text-sm text-gray-500">{method.desc}</p>
-                        </div>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                          formData.paymentMethod === method.id ? 'border-amber-500' : 'border-gray-300'
-                        }`}>
-                          {formData.paymentMethod === method.id && (
-                            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  {formData.paymentMethod === 'card' && (
-                    <div className="mb-8 p-6 bg-gray-50 rounded-xl space-y-4">
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Număr Card</label>
-                        <input
-                          type="text"
-                          placeholder="1234 5678 9012 3456"
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Data Expirare</label>
-                          <input
-                            type="text"
-                            placeholder="MM/YY"
-                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">CVV</label>
-                          <input
-                            type="text"
-                            placeholder="123"
-                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                          />
-                        </div>
+                        <p className="font-medium text-blue-800">Plată securizată prin PayPal</p>
+                        <p className="text-sm text-blue-600">Datele tale sunt protejate și criptate</p>
                       </div>
                     </div>
-                  )}
-
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => setStep(1)}
-                      className="flex-1 py-4 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all"
-                    >
-                      Înapoi
-                    </button>
-                    <button
-                      onClick={handlePayment}
-                      disabled={isSubmitting}
-                      className="flex-[2] py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                      Plătește {total.toFixed(0)} Lei
-                    </button>
                   </div>
+
+                  <div className="mb-8">
+                    <div className="bg-gray-50 rounded-xl p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-gray-600">Total de plată:</span>
+                        <span className="text-2xl font-bold text-gray-900">{total.toFixed(0)} Lei</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-6">≈ {(total * 0.20).toFixed(2)} EUR</p>
+                      
+                      {/* PayPal Button Container */}
+                      <div ref={paypalButtonRef} className="min-h-[50px]">
+                        {!paypalReady && (
+                          <div className="flex items-center justify-center py-4">
+                            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <span className="ml-2 text-gray-500">Se încarcă PayPal...</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => { setStep(1); setErrors({}); }}
+                    className="w-full py-4 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Înapoi la detalii
+                  </button>
                 </div>
               )}
 
@@ -456,6 +464,20 @@ export default function CheckoutPage() {
                       <div>
                         <p className="font-medium text-amber-800 text-sm">Timp estimat de livrare</p>
                         <p className="text-amber-600 text-sm">30-45 minute</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {step === 2 && (
+                  <div className="mt-6 p-4 bg-blue-50 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
+                      </svg>
+                      <div>
+                        <p className="font-medium text-blue-800 text-sm">Plată securizată</p>
+                        <p className="text-blue-600 text-sm">PayPal</p>
                       </div>
                     </div>
                   </div>

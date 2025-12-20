@@ -37,6 +37,13 @@ export function CartProvider({ children }) {
     fetchCart()
   }, [fetchCart])
 
+  // Helper pentru a calcula totalul și itemCount
+  const calculateCartTotals = (items) => {
+    const total = items.reduce((sum, item) => sum + (item.menuItem.price * item.quantity), 0)
+    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0)
+    return { total, itemCount }
+  }
+
   const addToCart = async (menuItemId, quantity = 1) => {
     if (!session?.user) {
       return { error: "Trebuie să fii autentificat pentru a adăuga produse în coș" }
@@ -66,6 +73,19 @@ export function CartProvider({ children }) {
   }
 
   const updateQuantity = async (itemId, quantity) => {
+    // Salvăm starea veche pentru rollback
+    const previousCart = cart
+    
+    // Optimistic update - actualizare imediată în UI
+    setCart(prev => {
+      if (!prev?.items) return prev
+      const newItems = prev.items.map(item => 
+        item.id === itemId ? { ...item, quantity } : item
+      )
+      const { total, itemCount } = calculateCartTotals(newItems)
+      return { ...prev, items: newItems, total, itemCount }
+    })
+
     try {
       const response = await fetch(`/api/cart/${itemId}`, {
         method: "PATCH",
@@ -78,18 +98,34 @@ export function CartProvider({ children }) {
       const data = await response.json()
 
       if (response.ok) {
+        // Sincronizăm cu răspunsul serverului
         setCart(data)
         return { success: true }
       } else {
+        // Rollback la starea anterioară
+        setCart(previousCart)
         return { error: data.error }
       }
     } catch (error) {
       console.error("Error updating quantity:", error)
+      // Rollback la starea anterioară
+      setCart(previousCart)
       return { error: "Eroare la actualizarea cantității" }
     }
   }
 
   const removeFromCart = async (itemId) => {
+    // Salvăm starea veche pentru rollback
+    const previousCart = cart
+    
+    // Optimistic update - eliminăm imediat din UI
+    setCart(prev => {
+      if (!prev?.items) return prev
+      const newItems = prev.items.filter(item => item.id !== itemId)
+      const { total, itemCount } = calculateCartTotals(newItems)
+      return { ...prev, items: newItems, total, itemCount }
+    })
+
     try {
       const response = await fetch(`/api/cart/${itemId}`, {
         method: "DELETE"
@@ -98,29 +134,44 @@ export function CartProvider({ children }) {
       const data = await response.json()
 
       if (response.ok) {
+        // Sincronizăm cu răspunsul serverului
         setCart(data)
         return { success: true }
       } else {
+        // Rollback la starea anterioară
+        setCart(previousCart)
         return { error: data.error }
       }
     } catch (error) {
       console.error("Error removing from cart:", error)
+      // Rollback la starea anterioară
+      setCart(previousCart)
       return { error: "Eroare la ștergerea produsului" }
     }
   }
 
   const clearCart = async () => {
+    // Salvăm starea veche pentru rollback
+    const previousCart = cart
+    
+    // Optimistic update
+    setCart(prev => ({ ...prev, items: [], total: 0, itemCount: 0 }))
+
     try {
       const response = await fetch("/api/cart", {
         method: "DELETE"
       })
 
       if (response.ok) {
-        setCart(prev => ({ ...prev, items: [], total: 0, itemCount: 0 }))
         return { success: true }
+      } else {
+        // Rollback
+        setCart(previousCart)
+        return { error: "Eroare la golirea coșului" }
       }
     } catch (error) {
       console.error("Error clearing cart:", error)
+      setCart(previousCart)
       return { error: "Eroare la golirea coșului" }
     }
   }

@@ -91,7 +91,7 @@ export async function PATCH(request, { params }) {
     const { role } = body
 
     // Validează rolul
-    const validRoles = ["user", "vip", "banned"]
+    const validRoles = ["user", "banned"]
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: "Rol invalid" },

@@ -12,7 +12,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState(null)
   const [selectedRole, setSelectedRole] = useState("")
   const [saving, setSaving] = useState(false)
-  const [stats, setStats] = useState({ total: 0, users: 0, vip: 0, banned: 0, admins: 0 })
+  const [stats, setStats] = useState({ total: 0, users: 0, banned: 0, admins: 0 })
 
   useEffect(() => {
     fetchUsers()
@@ -47,14 +47,12 @@ export default function UsersPage() {
         
         // Calculează statisticile
         if (!roleFilter && !search) {
-          const userCount = data.users.filter(u => !u.adminRole && (u.role === "user" || !u.role)).length
-          const vipCount = data.users.filter(u => !u.adminRole && u.role === "vip").length
+          const userCount = data.users.filter(u => !u.adminRole && u.role !== "banned").length
           const bannedCount = data.users.filter(u => u.role === "banned").length
           const adminCount = data.users.filter(u => u.adminRole).length
           setStats({
             total: data.pagination.total,
             users: userCount,
-            vip: vipCount,
             banned: bannedCount,
             admins: adminCount
           })
@@ -67,29 +65,47 @@ export default function UsersPage() {
     }
   }
 
-  const handleRoleChange = async (userId) => {
-    if (!selectedRole) return
+  const handleRoleChange = async (userId, newRole = null) => {
+    const roleToSet = newRole || selectedRole
+    if (!roleToSet) return
 
     setSaving(true)
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: selectedRole })
+        body: JSON.stringify({ role: roleToSet })
       })
 
       if (res.ok) {
         setUsers(users.map(u => 
-          u.id === userId ? { ...u, role: selectedRole } : u
+          u.id === userId ? { ...u, role: roleToSet, displayRole: u.adminRole || roleToSet } : u
         ))
         setEditingUser(null)
         setSelectedRole("")
+        // Recalculează statisticile
+        fetchUsers()
+      } else {
+        const data = await res.json()
+        alert(data.error || "Eroare la salvare")
       }
     } catch (error) {
       console.error("Error updating role:", error)
+      alert("Eroare la salvare")
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleToggleBan = async (user) => {
+    const newRole = user.role === "banned" ? "user" : "banned"
+    const action = newRole === "banned" ? "blochezi" : "deblochezi"
+    
+    if (!confirm(`Sigur vrei să ${action} utilizatorul ${user.name || user.email}?`)) {
+      return
+    }
+    
+    await handleRoleChange(user.id, newRole)
   }
 
   const handleDelete = async (userId, userName) => {
@@ -132,12 +148,6 @@ export default function UsersPage() {
             🔧 Moderator
           </span>
         )
-      case "vip":
-        return (
-          <span className="px-2 py-1 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full">
-            ⭐ VIP
-          </span>
-        )
       case "banned":
         return (
           <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full">
@@ -176,7 +186,7 @@ export default function UsersPage() {
       </div>
 
       {/* Statistici */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
@@ -213,18 +223,6 @@ export default function UsersPage() {
             <div>
               <p className="text-2xl font-bold text-white">{stats.users}</p>
               <p className="text-sm text-slate-400">Utilizatori</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <span className="text-lg">⭐</span>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{stats.vip}</p>
-              <p className="text-sm text-slate-400">VIP</p>
             </div>
           </div>
         </div>
@@ -270,7 +268,6 @@ export default function UsersPage() {
             >
               <option value="">Toate rolurile</option>
               <option value="user">Utilizatori</option>
-              <option value="vip">VIP</option>
               <option value="banned">Blocați</option>
             </select>
           </div>
@@ -345,7 +342,6 @@ export default function UsersPage() {
                             >
                               <option value="">Selectează...</option>
                               <option value="user">Utilizator</option>
-                              <option value="vip">⭐ VIP</option>
                               <option value="banned">🚫 Blocat</option>
                             </select>
                             <button
@@ -379,31 +375,41 @@ export default function UsersPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           {!user.adminRole && (
-                            <button
-                              onClick={() => { setEditingUser(user.id); setSelectedRole(user.role || "user"); }}
-                              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-700 rounded-lg transition-colors"
-                              title="Schimbă rol"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleToggleBan(user)}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  user.role === "banned" 
+                                    ? "text-green-400 hover:text-green-300 hover:bg-slate-700" 
+                                    : "text-red-400 hover:text-red-300 hover:bg-slate-700"
+                                }`}
+                                title={user.role === "banned" ? "Deblochează" : "Blochează"}
+                              >
+                                {user.role === "banned" ? (
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                  </svg>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(user.id, user.name)}
+                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
+                                title="Șterge"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </>
                           )}
                           {user.adminRole && (
                             <span className="text-xs text-slate-500 italic px-2">
                               Gestionează din Administratori
                             </span>
-                          )}
-                          {!user.adminRole && (
-                            <button
-                              onClick={() => handleDelete(user.id, user.name)}
-                              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
-                              title="Șterge"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
                           )}
                         </div>
                       </td>
@@ -442,12 +448,19 @@ export default function UsersPage() {
                       {!user.adminRole && (
                         <>
                           <button
-                            onClick={() => { setEditingUser(user.id); setSelectedRole(user.role || "user"); }}
-                            className="p-2 text-slate-400 hover:text-amber-400"
+                            onClick={() => handleToggleBan(user)}
+                            className={`p-2 ${user.role === "banned" ? "text-green-400" : "text-red-400"}`}
+                            title={user.role === "banned" ? "Deblochează" : "Blochează"}
                           >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
+                            {user.role === "banned" ? (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                              </svg>
+                            )}
                           </button>
                           <button
                             onClick={() => handleDelete(user.id, user.name)}
@@ -461,34 +474,6 @@ export default function UsersPage() {
                       )}
                     </div>
                   </div>
-                  
-                  {editingUser === user.id && (
-                    <div className="mt-3 flex items-center gap-2 bg-slate-700/50 p-3 rounded-lg">
-                      <select
-                        value={selectedRole}
-                        onChange={(e) => setSelectedRole(e.target.value)}
-                        className="flex-1 px-3 py-2 text-sm bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-amber-500"
-                      >
-                        <option value="">Selectează rol...</option>
-                        <option value="user">Utilizator</option>
-                        <option value="vip">⭐ VIP</option>
-                        <option value="banned">🚫 Blocat</option>
-                      </select>
-                      <button
-                        onClick={() => handleRoleChange(user.id)}
-                        disabled={saving || !selectedRole}
-                        className="px-4 py-2 bg-amber-500 text-white rounded-lg disabled:opacity-50"
-                      >
-                        Salvează
-                      </button>
-                      <button
-                        onClick={() => { setEditingUser(null); setSelectedRole(""); }}
-                        className="px-4 py-2 bg-slate-600 text-white rounded-lg"
-                      >
-                        Anulează
-                      </button>
-                    </div>
-                  )}
                   
                   <div className="mt-3 flex items-center justify-between text-sm text-slate-400">
                     <span>{user._count?.orders || 0} comenzi</span>

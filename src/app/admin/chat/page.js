@@ -85,30 +85,10 @@ export default function ChatPage() {
   // Ref pentru a ține evidența timpului când meniul a fost deschis
   const menuOpenTimeRef = useRef(null)
 
-  // Închide meniul când se apasă în altă parte
+  // Setează timpul când meniul se deschide
   useEffect(() => {
     if (longPressMenu) {
-      // Setăm timpul când meniul a fost deschis
       menuOpenTimeRef.current = Date.now()
-    }
-    
-    const handleClickOutside = (e) => {
-      if (longPressMenu) {
-        // Prevenim închiderea imediată - așteptăm 300ms după deschiderea meniului
-        const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
-        if (timeSinceOpen < 300) {
-          return
-        }
-        setLongPressMenu(null)
-      }
-    }
-    
-    document.addEventListener('touchstart', handleClickOutside)
-    document.addEventListener('click', handleClickOutside)
-    
-    return () => {
-      document.removeEventListener('touchstart', handleClickOutside)
-      document.removeEventListener('click', handleClickOutside)
     }
   }, [longPressMenu])
 
@@ -986,8 +966,9 @@ export default function ChatPage() {
             {longPressMenu && (
               <>
                 <div 
-                  className="fixed inset-0 z-50 bg-black/30 md:hidden"
-                  onTouchEnd={(e) => {
+                  className="fixed inset-0 z-[55] bg-black/30 md:hidden"
+                  onTouchStart={(e) => {
+                    e.stopPropagation()
                     // Previne închiderea imediată după long press
                     const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
                     if (timeSinceOpen > 300) {
@@ -995,6 +976,7 @@ export default function ChatPage() {
                     }
                   }}
                   onClick={(e) => {
+                    e.stopPropagation()
                     // Previne închiderea imediată
                     const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
                     if (timeSinceOpen > 300) {
@@ -1003,17 +985,27 @@ export default function ChatPage() {
                   }}
                 />
                 <div 
-                  className="fixed z-50 bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden md:hidden"
+                  className="fixed z-[60] bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden md:hidden"
                   style={{
                     left: Math.min(longPressMenu.x, window.innerWidth - 150),
                     top: Math.max(longPressMenu.y - 100, 10)
                   }}
+                  onTouchStart={(e) => e.stopPropagation()}
                   onTouchEnd={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onClick={() => startEditing(longPressMenu.messageId, longPressMenu.content)}
-                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-white hover:bg-slate-700 transition-colors"
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      startEditing(longPressMenu.messageId, longPressMenu.content)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEditing(longPressMenu.messageId, longPressMenu.content)
+                    }}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-white hover:bg-slate-700 active:bg-slate-600 transition-colors"
                   >
                     <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1021,8 +1013,17 @@ export default function ChatPage() {
                     Editează
                   </button>
                   <button
-                    onClick={() => handleMobileDelete(longPressMenu.messageId)}
-                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-red-400 hover:bg-slate-700 transition-colors border-t border-slate-700"
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      handleMobileDelete(longPressMenu.messageId)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleMobileDelete(longPressMenu.messageId)
+                    }}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-red-400 hover:bg-slate-700 active:bg-red-900/30 transition-colors border-t border-slate-700"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

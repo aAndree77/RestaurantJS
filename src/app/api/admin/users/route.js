@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import prisma from "@/lib/prisma"
 
+const SUPER_ADMIN_EMAIL = "andreiinsuratalu87@gmail.com"
+
 // GET - Obține toți utilizatorii
 export async function GET(request) {
   try {
@@ -12,13 +14,17 @@ export async function GET(request) {
       return NextResponse.json({ error: "Neautorizat" }, { status: 401 })
     }
 
-    // Verifică dacă e admin
-    const admin = await prisma.admin.findUnique({
-      where: { email: session.user.email }
-    })
-
-    if (!admin || admin.role !== "super_admin") {
-      return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
+    // Verifică dacă e super admin (hardcodat sau din DB)
+    const isSuperAdmin = session.user.email === SUPER_ADMIN_EMAIL
+    
+    if (!isSuperAdmin) {
+      const admin = await prisma.admin.findUnique({
+        where: { email: session.user.email }
+      })
+      
+      if (!admin || admin.role !== "super_admin") {
+        return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
+      }
     }
 
     // Obține query params pentru filtrare și paginare
@@ -45,7 +51,7 @@ export async function GET(request) {
     }
 
     // Obține utilizatorii
-    const [users, total] = await Promise.all([
+    const [users, total, admins] = await Promise.all([
       prisma.user.findMany({
         where,
         select: {
@@ -68,11 +74,35 @@ export async function GET(request) {
         skip: (page - 1) * limit,
         take: limit
       }),
-      prisma.user.count({ where })
+      prisma.user.count({ where }),
+      // Obține toți adminii pentru a verifica rolurile
+      prisma.admin.findMany({
+        select: {
+          email: true,
+          role: true
+        }
+      })
     ])
 
+    // Creează un map de email -> rol admin
+    const adminRoles = {}
+    // Adaugă super admin-ul hardcodat
+    adminRoles[SUPER_ADMIN_EMAIL] = "super_admin"
+    // Adaugă adminii din baza de date
+    admins.forEach(a => {
+      adminRoles[a.email] = a.role
+    })
+
+    // Adaugă informația de admin pentru fiecare utilizator
+    const usersWithAdminInfo = users.map(user => ({
+      ...user,
+      adminRole: adminRoles[user.email] || null,
+      // Dacă e admin, afișăm rolul de admin în loc de cel de user
+      displayRole: adminRoles[user.email] || user.role || "user"
+    }))
+
     return NextResponse.json({
-      users,
+      users: usersWithAdminInfo,
       pagination: {
         page,
         limit,

@@ -12,7 +12,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState(null)
   const [selectedRole, setSelectedRole] = useState("")
   const [saving, setSaving] = useState(false)
-  const [stats, setStats] = useState({ total: 0, users: 0, moderators: 0, admins: 0 })
+  const [stats, setStats] = useState({ total: 0, users: 0, vip: 0, banned: 0, admins: 0 })
 
   useEffect(() => {
     fetchUsers()
@@ -47,13 +47,15 @@ export default function UsersPage() {
         
         // Calculează statisticile
         if (!roleFilter && !search) {
-          const userCount = data.users.filter(u => u.role === "user").length
-          const modCount = data.users.filter(u => u.role === "moderator").length
-          const adminCount = data.users.filter(u => u.role === "admin").length
+          const userCount = data.users.filter(u => !u.adminRole && (u.role === "user" || !u.role)).length
+          const vipCount = data.users.filter(u => !u.adminRole && u.role === "vip").length
+          const bannedCount = data.users.filter(u => u.role === "banned").length
+          const adminCount = data.users.filter(u => u.adminRole).length
           setStats({
             total: data.pagination.total,
             users: userCount,
-            moderators: modCount,
+            vip: vipCount,
+            banned: bannedCount,
             admins: adminCount
           })
         }
@@ -108,18 +110,38 @@ export default function UsersPage() {
     }
   }
 
-  const getRoleBadge = (role) => {
+  const getRoleBadge = (user) => {
+    const role = user.displayRole || user.role || "user"
+    
     switch (role) {
-      case "admin":
+      case "super_admin":
         return (
           <span className="px-2 py-1 text-xs font-medium bg-purple-500/20 text-purple-400 rounded-full">
-            Admin
+            👑 Super Admin
+          </span>
+        )
+      case "admin":
+        return (
+          <span className="px-2 py-1 text-xs font-medium bg-indigo-500/20 text-indigo-400 rounded-full">
+            🛡️ Admin
           </span>
         )
       case "moderator":
         return (
           <span className="px-2 py-1 text-xs font-medium bg-blue-500/20 text-blue-400 rounded-full">
-            Moderator
+            🔧 Moderator
+          </span>
+        )
+      case "vip":
+        return (
+          <span className="px-2 py-1 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full">
+            ⭐ VIP
+          </span>
+        )
+      case "banned":
+        return (
+          <span className="px-2 py-1 text-xs font-medium bg-red-500/20 text-red-400 rounded-full">
+            🚫 Blocat
           </span>
         )
       default:
@@ -154,7 +176,7 @@ export default function UsersPage() {
       </div>
 
       {/* Statistici */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
@@ -164,7 +186,19 @@ export default function UsersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-white">{pagination.total}</p>
-              <p className="text-sm text-slate-400">Total Utilizatori</p>
+              <p className="text-sm text-slate-400">Total</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <span className="text-lg">👑</span>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-white">{stats.admins}</p>
+              <p className="text-sm text-slate-400">Admini</p>
             </div>
           </div>
         </div>
@@ -185,28 +219,24 @@ export default function UsersPage() {
 
         <div className="bg-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <span className="text-lg">⭐</span>
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{stats.moderators}</p>
-              <p className="text-sm text-slate-400">Moderatori</p>
+              <p className="text-2xl font-bold text-white">{stats.vip}</p>
+              <p className="text-sm text-slate-400">VIP</p>
             </div>
           </div>
         </div>
 
         <div className="bg-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+              <span className="text-lg">🚫</span>
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">{stats.admins}</p>
-              <p className="text-sm text-slate-400">Admini</p>
+              <p className="text-2xl font-bold text-white">{stats.banned}</p>
+              <p className="text-sm text-slate-400">Blocați</p>
             </div>
           </div>
         </div>
@@ -240,8 +270,8 @@ export default function UsersPage() {
             >
               <option value="">Toate rolurile</option>
               <option value="user">Utilizatori</option>
-              <option value="moderator">Moderatori</option>
-              <option value="admin">Admini</option>
+              <option value="vip">VIP</option>
+              <option value="banned">Blocați</option>
             </select>
           </div>
         </div>
@@ -315,8 +345,8 @@ export default function UsersPage() {
                             >
                               <option value="">Selectează...</option>
                               <option value="user">Utilizator</option>
-                              <option value="moderator">Moderator</option>
-                              <option value="admin">Admin</option>
+                              <option value="vip">⭐ VIP</option>
+                              <option value="banned">🚫 Blocat</option>
                             </select>
                             <button
                               onClick={() => handleRoleChange(user.id)}
@@ -337,7 +367,7 @@ export default function UsersPage() {
                             </button>
                           </div>
                         ) : (
-                          getRoleBadge(user.role)
+                          getRoleBadge(user)
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -348,24 +378,33 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => { setEditingUser(user.id); setSelectedRole(user.role || "user"); }}
-                            className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Schimbă rol"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(user.id, user.name)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Șterge"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          {!user.adminRole && (
+                            <button
+                              onClick={() => { setEditingUser(user.id); setSelectedRole(user.role || "user"); }}
+                              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-700 rounded-lg transition-colors"
+                              title="Schimbă rol"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                          )}
+                          {user.adminRole && (
+                            <span className="text-xs text-slate-500 italic px-2">
+                              Gestionează din Administratori
+                            </span>
+                          )}
+                          {!user.adminRole && (
+                            <button
+                              onClick={() => handleDelete(user.id, user.name)}
+                              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors"
+                              title="Șterge"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -396,26 +435,30 @@ export default function UsersPage() {
                       <div>
                         <p className="font-medium text-white">{user.name || "Fără nume"}</p>
                         <p className="text-sm text-slate-400">{user.email}</p>
-                        <div className="mt-1">{getRoleBadge(user.role)}</div>
+                        <div className="mt-1">{getRoleBadge(user)}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => { setEditingUser(user.id); setSelectedRole(user.role || "user"); }}
-                        className="p-2 text-slate-400 hover:text-amber-400"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(user.id, user.name)}
-                        className="p-2 text-slate-400 hover:text-red-400"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      {!user.adminRole && (
+                        <>
+                          <button
+                            onClick={() => { setEditingUser(user.id); setSelectedRole(user.role || "user"); }}
+                            className="p-2 text-slate-400 hover:text-amber-400"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(user.id, user.name)}
+                            className="p-2 text-slate-400 hover:text-red-400"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   
@@ -428,8 +471,8 @@ export default function UsersPage() {
                       >
                         <option value="">Selectează rol...</option>
                         <option value="user">Utilizator</option>
-                        <option value="moderator">Moderator</option>
-                        <option value="admin">Admin</option>
+                        <option value="vip">⭐ VIP</option>
+                        <option value="banned">🚫 Blocat</option>
                       </select>
                       <button
                         onClick={() => handleRoleChange(user.id)}

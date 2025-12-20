@@ -3,6 +3,19 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import prisma from "@/lib/prisma"
 
+const SUPER_ADMIN_EMAIL = "andreiinsuratalu87@gmail.com"
+
+// Funcție helper pentru verificare super admin
+async function checkSuperAdmin(email) {
+  if (email === SUPER_ADMIN_EMAIL) return true
+  
+  const admin = await prisma.admin.findUnique({
+    where: { email }
+  })
+  
+  return admin?.role === "super_admin"
+}
+
 // GET - Obține un utilizator specific
 export async function GET(request, { params }) {
   try {
@@ -12,11 +25,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: "Neautorizat" }, { status: 401 })
     }
 
-    const admin = await prisma.admin.findUnique({
-      where: { email: session.user.email }
-    })
-
-    if (!admin || admin.role !== "super_admin") {
+    if (!await checkSuperAdmin(session.user.email)) {
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
     }
 
@@ -74,11 +83,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: "Neautorizat" }, { status: 401 })
     }
 
-    const admin = await prisma.admin.findUnique({
-      where: { email: session.user.email }
-    })
-
-    if (!admin || admin.role !== "super_admin") {
+    if (!await checkSuperAdmin(session.user.email)) {
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
     }
 
@@ -86,7 +91,7 @@ export async function PATCH(request, { params }) {
     const { role } = body
 
     // Validează rolul
-    const validRoles = ["user", "moderator", "admin"]
+    const validRoles = ["user", "vip", "banned"]
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: "Rol invalid" },
@@ -124,11 +129,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: "Neautorizat" }, { status: 401 })
     }
 
-    const admin = await prisma.admin.findUnique({
-      where: { email: session.user.email }
-    })
-
-    if (!admin || admin.role !== "super_admin") {
+    if (!await checkSuperAdmin(session.user.email)) {
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
     }
 

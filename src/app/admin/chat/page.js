@@ -964,74 +964,88 @@ export default function ChatPage() {
             
             {/* Long press context menu pentru mobil */}
             {longPressMenu && (
-              <>
-                <div 
-                  className="fixed inset-0 z-[55] bg-black/30 md:hidden"
-                  onTouchStart={(e) => {
-                    e.stopPropagation()
-                    // Previne închiderea imediată după long press
+              <div 
+                className="fixed inset-0 z-[100] md:hidden"
+                onClick={(e) => {
+                  // Închide doar dacă click-ul e pe overlay, nu pe meniu
+                  if (e.target === e.currentTarget) {
                     const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
-                    if (timeSinceOpen > 300) {
+                    if (timeSinceOpen > 400) {
                       setLongPressMenu(null)
                     }
-                  }}
+                  }
+                }}
+              >
+                {/* Overlay pentru închidere */}
+                <div 
+                  className="absolute inset-0 bg-black/30"
                   onClick={(e) => {
                     e.stopPropagation()
-                    // Previne închiderea imediată
                     const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
-                    if (timeSinceOpen > 300) {
+                    if (timeSinceOpen > 400) {
                       setLongPressMenu(null)
                     }
                   }}
                 />
+                
+                {/* Meniu - poziționat absolut față de viewport */}
                 <div 
-                  className="fixed z-[60] bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden md:hidden"
+                  className="absolute bg-slate-800 rounded-xl shadow-2xl border border-slate-600 overflow-hidden"
                   style={{
-                    left: Math.min(longPressMenu.x, window.innerWidth - 150),
-                    top: Math.max(longPressMenu.y - 100, 10)
+                    left: `${Math.min(Math.max(longPressMenu.x - 70, 10), window.innerWidth - 160)}px`,
+                    top: `${Math.max(longPressMenu.y - 120, 20)}px`,
+                    minWidth: '150px',
+                    zIndex: 101
                   }}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onTouchEnd={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onTouchEnd={(e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      startEditing(longPressMenu.messageId, longPressMenu.content)
-                    }}
+                    type="button"
+                    className="flex items-center gap-3 w-full px-5 py-4 text-left text-white bg-slate-800 active:bg-slate-600"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                     onClick={(e) => {
+                      e.preventDefault()
                       e.stopPropagation()
-                      startEditing(longPressMenu.messageId, longPressMenu.content)
+                      const msgId = longPressMenu.messageId
+                      const msgContent = longPressMenu.content
+                      setLongPressMenu(null)
+                      setTimeout(() => {
+                        setEditingMessage(msgId)
+                        setEditContent(msgContent || "")
+                        setNewMessage(msgContent || "")
+                        if (inputRef.current) {
+                          inputRef.current.focus()
+                        }
+                      }, 50)
                     }}
-                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-white hover:bg-slate-700 active:bg-slate-600 transition-colors"
                   >
-                    <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    Editează
+                    <span className="font-medium">Editează</span>
                   </button>
+                  <div className="h-px bg-slate-700" />
                   <button
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onTouchEnd={(e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      handleMobileDelete(longPressMenu.messageId)
-                    }}
+                    type="button"
+                    className="flex items-center gap-3 w-full px-5 py-4 text-left text-red-400 bg-slate-800 active:bg-red-900/50"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                     onClick={(e) => {
+                      e.preventDefault()
                       e.stopPropagation()
-                      handleMobileDelete(longPressMenu.messageId)
+                      const msgId = longPressMenu.messageId
+                      setLongPressMenu(null)
+                      setTimeout(() => {
+                        handleDeleteMessage(msgId)
+                      }, 50)
                     }}
-                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-red-400 hover:bg-slate-700 active:bg-red-900/30 transition-colors border-t border-slate-700"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    Șterge
+                    <span className="font-medium">Șterge</span>
                   </button>
                 </div>
-              </>
+              </div>
             )}
 
             {/* Message Input */}

@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma"
 
 const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
 const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET
-const PAYPAL_API = process.env.NODE_ENV === "production" 
+const PAYPAL_API = process.env.PAYPAL_MODE === "live" 
   ? "https://api-m.paypal.com" 
   : "https://api-m.sandbox.paypal.com"
 
@@ -20,6 +20,10 @@ async function getPayPalAccessToken() {
     },
     body: "grant_type=client_credentials"
   })
+
+  if (!response.ok) {
+    throw new Error("Failed to get PayPal access token")
+  }
 
   const data = await response.json()
   return data.access_token

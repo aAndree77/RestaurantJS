@@ -7,9 +7,6 @@ import { useCart } from "@/context/CartContext"
 import Image from "next/image"
 import Link from "next/link"
 import Navbar from "../components/Navbar"
-import Script from "next/script"
-
-const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
 
 function CheckoutContent() {
   const { data: session, status } = useSession()
@@ -41,12 +38,45 @@ function CheckoutContent() {
     }
   }, [session])
 
-  // Check if PayPal client ID is configured
+  // Load PayPal SDK dynamically
   useEffect(() => {
-    if (!PAYPAL_CLIENT_ID) {
-      console.error("PayPal Client ID not configured")
-      setPaypalError(true)
+    const loadPayPalScript = async () => {
+      // Fetch client ID from API to avoid build-time issues
+      try {
+        const res = await fetch('/api/paypal/config')
+        const data = await res.json()
+        
+        if (!data.clientId) {
+          console.error("PayPal Client ID not available")
+          setPaypalError(true)
+          return
+        }
+
+        // Check if already loaded
+        if (window.paypal) {
+          setPaypalReady(true)
+          return
+        }
+
+        const script = document.createElement('script')
+        script.src = `https://www.paypal.com/sdk/js?client-id=${data.clientId}&currency=EUR`
+        script.async = true
+        script.onload = () => {
+          console.log("PayPal SDK loaded")
+          setPaypalReady(true)
+        }
+        script.onerror = () => {
+          console.error("Failed to load PayPal SDK")
+          setPaypalError(true)
+        }
+        document.body.appendChild(script)
+      } catch (err) {
+        console.error("Error loading PayPal config:", err)
+        setPaypalError(true)
+      }
     }
+
+    loadPayPalScript()
   }, [])
 
   useEffect(() => {
@@ -203,20 +233,6 @@ function CheckoutContent() {
 
   return (
     <>
-      {PAYPAL_CLIENT_ID && (
-        <Script
-          src={`https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=EUR`}
-          strategy="afterInteractive"
-          onLoad={() => {
-            console.log("PayPal SDK loaded successfully")
-            setPaypalReady(true)
-          }}
-          onError={(e) => {
-            console.error("PayPal SDK load error:", e)
-            setPaypalError(true)
-          }}
-        />
-      )}
       <Navbar solid />
       <main className="min-h-screen bg-gradient-to-b from-stone-100 to-stone-50 pt-24 pb-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">

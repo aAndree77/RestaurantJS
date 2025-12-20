@@ -29,8 +29,10 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
     }
 
+    const { id } = await params
+
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         name: true,
@@ -87,6 +89,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const { role } = body
 
@@ -100,7 +103,7 @@ export async function PATCH(request, { params }) {
     }
 
     const user = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: { role },
       select: {
         id: true,
@@ -133,9 +136,11 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 })
     }
 
+    const { id } = await params
+
     // Verifică dacă utilizatorul există
     const user = await prisma.user.findUnique({
-      where: { id: params.id }
+      where: { id }
     })
 
     if (!user) {
@@ -144,7 +149,7 @@ export async function DELETE(request, { params }) {
 
     // Șterge utilizatorul
     await prisma.user.delete({
-      where: { id: params.id }
+      where: { id }
     })
 
     return NextResponse.json({ success: true })

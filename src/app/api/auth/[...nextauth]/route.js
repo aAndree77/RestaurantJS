@@ -60,6 +60,11 @@ export const authOptions = {
           throw new Error("Email sau parolă incorectă")
         }
 
+        // Verifică dacă utilizatorul este blocat
+        if (user.role === "banned") {
+          throw new Error("Contul tău a fost blocat. Contactează administratorul.")
+        }
+
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
           user.password
@@ -87,6 +92,19 @@ export const authOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
+      // Verifică dacă utilizatorul este blocat
+      if (profile?.email) {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: profile.email },
+          select: { role: true }
+        })
+        
+        if (existingUser?.role === "banned") {
+          // Utilizatorul este blocat, refuză autentificarea
+          return false
+        }
+      }
+
       // Permite autentificarea cu Google și salvează/actualizează imaginea în baza de date
       if (account?.provider === "google" && profile?.picture) {
         try {

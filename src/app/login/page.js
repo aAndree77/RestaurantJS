@@ -35,7 +35,12 @@ export default function LoginPage() {
       })
 
       if (result?.error) {
-        setError("Email sau parolă incorectă")
+        // Verifică dacă e cont blocat
+        if (result.error.includes("blocat")) {
+          setError("Contul tău a fost blocat. Contactează administratorul.")
+        } else {
+          setError("Email sau parolă incorectă")
+        }
         setLoading(false)
         return
       }

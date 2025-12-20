@@ -82,10 +82,23 @@ export default function ChatPage() {
     }
   }, [])
 
+  // Ref pentru a ține evidența timpului când meniul a fost deschis
+  const menuOpenTimeRef = useRef(null)
+
   // Închide meniul când se apasă în altă parte
   useEffect(() => {
-    const handleClickOutside = () => {
+    if (longPressMenu) {
+      // Setăm timpul când meniul a fost deschis
+      menuOpenTimeRef.current = Date.now()
+    }
+    
+    const handleClickOutside = (e) => {
       if (longPressMenu) {
+        // Prevenim închiderea imediată - așteptăm 300ms după deschiderea meniului
+        const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
+        if (timeSinceOpen < 300) {
+          return
+        }
         setLongPressMenu(null)
       }
     }
@@ -974,7 +987,20 @@ export default function ChatPage() {
               <>
                 <div 
                   className="fixed inset-0 z-50 bg-black/30 md:hidden"
-                  onClick={() => setLongPressMenu(null)}
+                  onTouchEnd={(e) => {
+                    // Previne închiderea imediată după long press
+                    const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
+                    if (timeSinceOpen > 300) {
+                      setLongPressMenu(null)
+                    }
+                  }}
+                  onClick={(e) => {
+                    // Previne închiderea imediată
+                    const timeSinceOpen = Date.now() - (menuOpenTimeRef.current || 0)
+                    if (timeSinceOpen > 300) {
+                      setLongPressMenu(null)
+                    }
+                  }}
                 />
                 <div 
                   className="fixed z-50 bg-slate-800 rounded-xl shadow-xl border border-slate-700 overflow-hidden md:hidden"
@@ -982,6 +1008,7 @@ export default function ChatPage() {
                     left: Math.min(longPressMenu.x, window.innerWidth - 150),
                     top: Math.max(longPressMenu.y - 100, 10)
                   }}
+                  onTouchEnd={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button

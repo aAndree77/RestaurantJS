@@ -9,6 +9,8 @@ import Link from "next/link"
 import Navbar from "../components/Navbar"
 import Script from "next/script"
 
+const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
+
 function CheckoutContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -27,6 +29,7 @@ function CheckoutContent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [step, setStep] = useState(1)
   const [paypalReady, setPaypalReady] = useState(false)
+  const [paypalError, setPaypalError] = useState(false)
   const [orderData, setOrderData] = useState(null)
 
   useEffect(() => {
@@ -37,6 +40,14 @@ function CheckoutContent() {
       }))
     }
   }, [session])
+
+  // Check if PayPal client ID is configured
+  useEffect(() => {
+    if (!PAYPAL_CLIENT_ID) {
+      console.error("PayPal Client ID not configured")
+      setPaypalError(true)
+    }
+  }, [])
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -165,8 +176,8 @@ function CheckoutContent() {
           setErrors({ submit: "Plata a fost anulată" })
         },
         onError: (err) => {
-          console.error("PayPal error:", err)
-          setErrors({ submit: "Eroare la procesarea plății PayPal" })
+          console.error("Payment error:", err)
+          setErrors({ submit: "Eroare la procesarea plății. Te rugăm să încerci din nou." })
         }
       }).render(paypalButtonRef.current)
     }
@@ -192,10 +203,20 @@ function CheckoutContent() {
 
   return (
     <>
-      <Script
-        src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&currency=EUR`}
-        onLoad={() => setPaypalReady(true)}
-      />
+      {PAYPAL_CLIENT_ID && (
+        <Script
+          src={`https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=EUR`}
+          strategy="afterInteractive"
+          onLoad={() => {
+            console.log("PayPal SDK loaded successfully")
+            setPaypalReady(true)
+          }}
+          onError={(e) => {
+            console.error("PayPal SDK load error:", e)
+            setPaypalError(true)
+          }}
+        />
+      )}
       <Navbar solid />
       <main className="min-h-screen bg-gradient-to-b from-stone-100 to-stone-50 pt-24 pb-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -215,7 +236,7 @@ function CheckoutContent() {
             <div className="flex items-center justify-center gap-4">
               {[
                 { num: 1, label: "Detalii livrare" },
-                { num: 2, label: "Plată PayPal" },
+                { num: 2, label: "Plată online" },
                 { num: 3, label: "Confirmare" }
               ].map((s, i) => (
                 <div key={s.num} className="flex items-center">
@@ -329,11 +350,11 @@ function CheckoutContent() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
                   <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
                     </div>
-                    Plată cu PayPal
+                    Plată online
                   </h2>
 
                   {errors.submit && (
@@ -351,7 +372,7 @@ function CheckoutContent() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                       </svg>
                       <div>
-                        <p className="font-medium text-blue-800">Plată securizată prin PayPal</p>
+                        <p className="font-medium text-blue-800">Plată securizată</p>
                         <p className="text-sm text-blue-600">Datele tale sunt protejate și criptate</p>
                       </div>
                     </div>
@@ -365,12 +386,23 @@ function CheckoutContent() {
                       </div>
                       <p className="text-xs text-gray-500 mb-6">≈ {(total * 0.20).toFixed(2)} EUR</p>
                       
-                      {/* PayPal Button Container */}
+                      {/* Payment Button Container */}
                       <div ref={paypalButtonRef} className="min-h-[50px]">
-                        {!paypalReady && (
+                        {!paypalReady && !paypalError && (
                           <div className="flex items-center justify-center py-4">
                             <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                            <span className="ml-2 text-gray-500">Se încarcă PayPal...</span>
+                            <span className="ml-2 text-gray-500">Se încarcă opțiunile de plată...</span>
+                          </div>
+                        )}
+                        {paypalError && (
+                          <div className="text-center py-4">
+                            <p className="text-red-600 mb-3">Nu s-a putut încărca sistemul de plăți.</p>
+                            <button 
+                              onClick={() => window.location.reload()}
+                              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+                            >
+                              Reîncearcă
+                            </button>
                           </div>
                         )}
                       </div>
